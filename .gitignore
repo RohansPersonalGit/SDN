@@ -62,3 +62,5 @@ __MACOSX/
 ._*
 .Spotlight-V100
 .Trashes
+.vscode/
+.idea/
