@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include "commonProto.h"
 
+#define PORT "9034"   // Port we're listening on
+
 void usage(char *progName) {
 
   fprintf(stderr, "Usage: %s [-k] [-l] [-v] [-r]  [-p source_port] [-w timeout] [hostname] [port[s]]\n", progName);

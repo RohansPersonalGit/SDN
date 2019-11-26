@@ -14,7 +14,7 @@ TH_CLIBS=-pthread
 #build the ncTh version of the program. Basically take the name of each required .c file 
 #and change the .c to .o
 
-THREADSOURCE=ncTh.c Thread.c usage.c parseOptions.c 
+THREADSOURCE=ncTh.c Thread.c usage.c parseOptions.c commonProto.c
 THREADOBJS = $(THREADSOURCE:.c=.o)
 #These are the options for building the version of the program that uses
 #the poll() system call. 

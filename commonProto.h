@@ -1,7 +1,15 @@
 #ifndef COMMONPROTO
 #define COMMONPROTO
 #define RESERVED_PORT 1023
-
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 struct commandOptions {
   int option_k;   // indicates if -k was provided.
   int option_l;   // indicates if -l provided
@@ -34,4 +42,6 @@ struct commandOptions {
 
 int parseOptions(int argc, char * argv[], struct commandOptions * co);
 void usage(char *);
+void *get_in_addr(struct sockaddr *sa);
+int get_listener_socket(char* port); 
 #endif
