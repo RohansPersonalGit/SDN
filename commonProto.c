@@ -53,7 +53,7 @@ int get_listener_socket(char* port)
 
     freeaddrinfo(ai); // All done with this
 
-    // Listen
+    //Listen
     if (listen(listener, 10) == -1) {
         return -1;
     }
