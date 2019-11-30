@@ -23,6 +23,7 @@ int writeDone = 1;
 int threadcount = 0;
 int connection = 0;
 int k = 0;
+int r = 0;
 pthread_t tid[10];
 struct fileDesc **fds;
 
@@ -30,21 +31,42 @@ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 void *handleWrite(void *arg)
 
 {
+  int clientSocket = *((int *)arg);
   int retu = 0;
   int inputs;
-  inputs = read(0, client_message, sizeof client_message);
-  int clientSocket = *((int *)arg);
-  if (inputs > 0)
+  while ((inputs = (read(STDIN_FILENO, client_message, sizeof client_message)) > 0) &&
+         connection)
   {
-    retu = send(clientSocket, client_message, sizeof client_message, 0);
+    if (inputs == -1)
+    {
+      perror("read stdin");
+      perror("sessnd");
+      memset(client_message, 0, sizeof(client_message));
+      break;
+    }
+    (retu = send(clientSocket, client_message, sizeof client_message, 0));
     if (retu == -1)
     {
-      perror("send");
+      perror("sessnd");
+      memset(client_message, 0, sizeof(client_message));
+      break;
     }
+    if(r){
+            for (int x = 0; x < threadcount; x++)
+      {
+        if (clientSocket != fds[x]->fd && fds[x]->inuse)
+        {
+          int output = send(fds[x]->fd, client_message, sizeof client_message, 0);
+          if (output == -1)
+          {
+            perror("send");
+          }
+        }
+      }
+    }
+    memset(client_message, 0, sizeof(client_message));
   }
   memset(client_message, 0, sizeof(client_message));
-  writeDone = 1;
-  pthread_join(pthread_self(), NULL);
 }
 
 void *handleRead(void *arg)
@@ -52,77 +74,101 @@ void *handleRead(void *arg)
   int clientSocket = *((int *)arg);
   int ret;
 
-  if ((ret = recv(clientSocket, buffer, sizeof buffer, 0)) == -1)
+  while (ret = (read(clientSocket, buffer, sizeof buffer) > 0))
   {
-    printf("neg 1");
-    perror("recv");
-    connection = 0;
-    close(clientSocket);
-  }
-  else if (ret > 0)
-  {
-
+    if (ret == -1)
+    {
+      perror("read socket");
+      break;
+      memset(buffer, 0, sizeof(buffer));
+      connection = 0;
+    }
     fprintf(stdout, buffer);
+    if (r)
+    {
+      for (int x = 0; x < threadcount; x++)
+      {
+        if (clientSocket != fds[x]->fd && fds[x]->inuse)
+        {
+          int output = send(fds[x]->fd, buffer, sizeof buffer, 0);
+          if (output == -1)
+          {
+            perror("send");
+          }
+        }
+      }
+    }
+    memset(buffer, 0, sizeof(buffer));
   }
-  else if (ret == 0)
-  {
-    printf("set connection to 90");
-    close(clientSocket);
-    printf("after close");
-    connection = 0;
-  }
-  memset(buffer, 0, sizeof(buffer));
-  readDone = 1;
-  pthread_join(pthread_self(), NULL);
+  connection = 0;
 }
 void *serverThread(void *arg)
 {
-  printf("creating a client server new thread\n");
   int newSocket = *((int *)arg);
   int ret;
   pthread_t write;
   pthread_t readt;
   connection = 1;
-  while (1)
+  while (connection | k)
   {
-    if (connection)
+    if (pthread_create(&write, NULL, handleWrite, &newSocket) != 0)
     {
-      if (writeDone)
-      {
-        writeDone = 0;
-        if (pthread_create(&write, NULL, handleWrite, &newSocket) != 0)
-        {
-
-          printf("Failed to create thread\n");
-        }
-      }
-      if (readDone)
-      {
-        readDone = 0;
-        if (pthread_create(&readt, NULL, handleRead, &newSocket) != 0)
-        {
-          printf("Failed to create thread\n");
-        }
-      }
+      printf("failed to create write thread\n");
     }
-    else
+    if (pthread_create(&readt, NULL, handleRead, &newSocket) != 0)
     {
-      printf("befrore join");
-      pthread_join(pthread_self(), NULL);
-      free(fds[threadcount]);
-      threadcount--;
-      if (!k)
-      {
-        exit(1);
-      }
-      else
-      {
-        break;
-      }
-      {
-      }
+      printf("failed to create read thread\n");
+    }
+    printf("before readt");
+    pthread_join(readt, NULL);
+    printf("joinedreated\n");
+    pthread_join(write, NULL);
+    printf("joinedwrite");
+    close(newSocket);
+  }
+}
+
+void validateInputs(struct commandOptions f, void *fd)
+{
+  int socket = *((int *)fd);
+  if (f.option_k)
+  {
+    if (!f.option_l)
+    {
+      perror("It is an error to use the -k without -l");
+      exit(1);
     }
   }
+  if (f.timeout > 0)
+  {
+    struct timeval timeout;
+    timeout.tv_sec = f.timeout;
+    timeout.tv_usec = 0;
+    if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+    {
+      perror("set sock opt failed");
+    }
+    if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+    {
+      perror("set sock opt failed");
+    }
+  }
+  fprintf(stdout, "midvalidate");
+  if (f.option_p & !f.option_l)
+  {
+    perror("it is an error to use the -p without -l 0");
+    exit(1);
+  }
+  if(f.option_r && !f.option_l){
+    perror("it is an error to use r without l"); 
+    exit(1); 
+  }
+  if (f.option_r)
+  {
+    printf("setting r to one\n");
+    r = 1;
+  }
+  printf("this is what constant r =%d\n", r);
 }
 
 int main(int argc, char **argv)
@@ -144,12 +190,6 @@ int main(int argc, char **argv)
   printf("Host to connect to = %s\n", cmdOps.hostname);
   printf("Port to connect to = %d\n", cmdOps.port);
 
-  if (cmdOps.option_l & cmdOps.option_k)
-  {
-    printf("it is an error to use -k with -l");
-    exit(1);
-  }
-
   fds = malloc(10 * sizeof(struct fileDesc));
   k = cmdOps.option_k;
   int listener, newSocket;
@@ -168,14 +208,16 @@ int main(int argc, char **argv)
 
     struct addrinfo hints, *servinfo, *p;
     int rv;
-
+    char port[256];
+    sprintf(port, "%d", cmdOps.option_p);
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-
+    char remoteP[sizeof(int)];
+    sprintf(remoteP, "%d", cmdOps.source_port);
     if ((rv = getaddrinfo("localhost", PORT, &hints, &servinfo)) != 0)
     {
-      fprintf(stderr, "getaddrinfo this is gay\n");
+      fprintf(stderr, "getaddrinfo this \n");
     }
     fprintf(stdout, "before for loop\n");
     for (p = servinfo; p != NULL; p = p->ai_next)
@@ -186,6 +228,7 @@ int main(int argc, char **argv)
         continue;
       }
       printf("iteration\n");
+      validateInputs(cmdOps, &newSocket);
       if (connect(newSocket, p->ai_addr, p->ai_addrlen) == -1)
       {
         perror("asdf\n");
@@ -194,11 +237,6 @@ int main(int argc, char **argv)
         perror("asdf\n");
         continue;
       }
-      connection = 1;
-      if (pthread_create(&client, NULL, serverThread, &newSocket) != 0)
-      {
-        printf("Failed to create thread\n");
-      }
       printf("afterconnection\n");
       break;
     }
@@ -206,14 +244,8 @@ int main(int argc, char **argv)
     {
       printf("thisis gay\n");
     }
-    printf("beforethreadcreate\n");
-    while (recv(newSocket, buffer, sizeof buffer, 0) != -1)
-    {
-      if (pthread_create(&client, NULL, serverThread, &newSocket) != 0)
-      {
-        printf("Failed to create thread\n");
-      }
-    }
+    pthread_create(&client, NULL, serverThread, &newSocket);
+    pthread_join(client, NULL);
   }
   else
   {
@@ -242,16 +274,23 @@ int main(int argc, char **argv)
     while (1)
     {
 
+      printf("new itteration of main while loop ");
       addrlen = sizeof clientAddr;
       newSocket = accept(listener, (struct sockaddr *)&clientAddr, &addrlen);
-      threadcount++;
+      validateInputs(cmdOps, &newSocket);
       printf("back here");
       fds[threadcount] = calloc(1, sizeof(struct fileDesc));
-      fds[threadcount]->fd = newSocket;
       if (pthread_create(&tid[threadcount], NULL, serverThread, &newSocket) != 0)
       {
         printf("Failed to create thread\n");
       }
+      else
+      {
+        fds[threadcount]->inuse = 1;
+        fds[threadcount]->fd = newSocket;
+        threadcount++;
+      }
+      printf("after creation");
     }
   }
   return 0;
