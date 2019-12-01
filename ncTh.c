@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <signal.h>
 #include <arpa/inet.h>
 #include <fcntl.h>  // for open
 #include <unistd.h> // for close
@@ -35,24 +36,24 @@ void *handleWrite(void *arg)
   int retu = 0;
   int inputs;
   while ((inputs = (read(STDIN_FILENO, client_message, sizeof client_message)) > 0) &&
-         connection)
+         connection==1)
   {
     if (inputs == -1)
     {
       perror("read stdin");
-      perror("sessnd");
       memset(client_message, 0, sizeof(client_message));
       break;
     }
     (retu = send(clientSocket, client_message, sizeof client_message, 0));
     if (retu == -1)
     {
-      perror("sessnd");
+      perror("send");
       memset(client_message, 0, sizeof(client_message));
       break;
     }
-    if(r){
-            for (int x = 0; x < threadcount; x++)
+    if (r)
+    {
+      for (int x = 0; x < threadcount; x++)
       {
         if (clientSocket != fds[x]->fd && fds[x]->inuse)
         {
@@ -74,14 +75,14 @@ void *handleRead(void *arg)
   int clientSocket = *((int *)arg);
   int ret;
 
-  while (ret = (read(clientSocket, buffer, sizeof buffer) > 0))
+  while (ret = (read(clientSocket, buffer, sizeof buffer) > 0)&& connection ==1)
   {
     if (ret == -1)
     {
-      perror("read socket");
-      break;
+      perror("read");
       memset(buffer, 0, sizeof(buffer));
       connection = 0;
+      close(clientSocket); 
     }
     fprintf(stdout, buffer);
     if (r)
@@ -119,56 +120,9 @@ void *serverThread(void *arg)
     {
       printf("failed to create read thread\n");
     }
-    printf("before readt");
     pthread_join(readt, NULL);
-    printf("joinedreated\n");
     pthread_join(write, NULL);
-    printf("joinedwrite");
-    close(newSocket);
   }
-}
-
-void validateInputs(struct commandOptions f, void *fd)
-{
-  int socket = *((int *)fd);
-  if (f.option_k)
-  {
-    if (!f.option_l)
-    {
-      perror("It is an error to use the -k without -l");
-      exit(1);
-    }
-  }
-  if (f.timeout > 0)
-  {
-    struct timeval timeout;
-    timeout.tv_sec = f.timeout;
-    timeout.tv_usec = 0;
-    if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
-    {
-      perror("set sock opt failed");
-    }
-    if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
-    {
-      perror("set sock opt failed");
-    }
-  }
-  fprintf(stdout, "midvalidate");
-  if (f.option_p & !f.option_l)
-  {
-    perror("it is an error to use the -p without -l 0");
-    exit(1);
-  }
-  if(f.option_r && !f.option_l){
-    perror("it is an error to use r without l"); 
-    exit(1); 
-  }
-  if (f.option_r)
-  {
-    printf("setting r to one\n");
-    r = 1;
-  }
-  printf("this is what constant r =%d\n", r);
 }
 
 int main(int argc, char **argv)
@@ -209,46 +163,44 @@ int main(int argc, char **argv)
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char port[256];
-    sprintf(port, "%d", cmdOps.option_p);
+    sprintf(port, "%d", cmdOps.port);
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     char remoteP[sizeof(int)];
     sprintf(remoteP, "%d", cmdOps.source_port);
-    if ((rv = getaddrinfo("localhost", PORT, &hints, &servinfo)) != 0)
+    if ((rv = getaddrinfo("localhost", port, &hints, &servinfo)) != 0)
     {
       fprintf(stderr, "getaddrinfo this \n");
     }
-    fprintf(stdout, "before for loop\n");
     for (p = servinfo; p != NULL; p = p->ai_next)
     {
       if ((newSocket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
       {
-        perror("claisdfajsd");
+        perror("accept\n");
         continue;
       }
-      printf("iteration\n");
-      validateInputs(cmdOps, &newSocket);
+      r = validateInputs(cmdOps, &newSocket);
       if (connect(newSocket, p->ai_addr, p->ai_addrlen) == -1)
       {
-        perror("asdf\n");
+        perror("connect\n");
 
         close(newSocket);
-        perror("asdf\n");
         continue;
       }
-      printf("afterconnection\n");
       break;
     }
     if (p == NULL)
     {
-      printf("thisis gay\n");
+      printf("No Connection Found\n");
+      exit(1);
     }
     pthread_create(&client, NULL, serverThread, &newSocket);
     pthread_join(client, NULL);
   }
   else
   {
+    
 
     listener = get_listener_socket(PORT);
     // Configure settings of the server address struct
@@ -274,11 +226,20 @@ int main(int argc, char **argv)
     while (1)
     {
 
-      printf("new itteration of main while loop ");
+      if (threadcount > 10)
+      {
+        for (int i = 0; i < 10; i++)
+        {
+          pthread_join(tid[i], NULL);
+          threadcount--;
+        }
+      }
       addrlen = sizeof clientAddr;
       newSocket = accept(listener, (struct sockaddr *)&clientAddr, &addrlen);
-      validateInputs(cmdOps, &newSocket);
-      printf("back here");
+      r = validateInputs(cmdOps, &newSocket);
+      if(k){
+        
+      }
       fds[threadcount] = calloc(1, sizeof(struct fileDesc));
       if (pthread_create(&tid[threadcount], NULL, serverThread, &newSocket) != 0)
       {
@@ -289,8 +250,12 @@ int main(int argc, char **argv)
         fds[threadcount]->inuse = 1;
         fds[threadcount]->fd = newSocket;
         threadcount++;
+        if(k==0){
+          pthread_join(tid[k], NULL); 
+          return 0; 
+          exit(1);
+        }
       }
-      printf("after creation");
     }
   }
   return 0;

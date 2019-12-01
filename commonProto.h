@@ -43,5 +43,6 @@ struct commandOptions {
 int parseOptions(int argc, char * argv[], struct commandOptions * co);
 void usage(char *);
 void *get_in_addr(struct sockaddr *sa);
-int get_listener_socket(char* port); 
+int get_listener_socket(char* port);
+int validateInputs(struct commandOptions f, void *fd);
 #endif
