@@ -26,7 +26,7 @@ POLL_CLIBS=
 #What you need to put on the following line depends upon the .c files required to 
 #build the ncP version of the program. Basically take the name of each required .c file 
 #and change the .c to .o
-POLLSOURCE=ncP.c usage.c parseOptions.c
+POLLSOURCE=ncP.c usage.c parseOptions.c commonProto.c
 POLLOBJS = $(POLLSOURCE:.c=.o)
 
 ncTh: $(THREADOBJS)

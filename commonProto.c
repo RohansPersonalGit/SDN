@@ -16,7 +16,7 @@ int get_listener_socket(char* port)
     int rv;
 
     struct addrinfo hints, *ai, *p;
-
+//
     // Get us a socket and bind it
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
