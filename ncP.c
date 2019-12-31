@@ -67,6 +67,12 @@ int main(int argc, char **argv)
 
     int fd_count = 0;
     int fd_size = 0;
+            int t; 
+        if(cmdOps.timeout!=0){
+            t = cmdOps.timeout*1000; 
+        }else{
+            t = -1; 
+        }
     if (cmdOps.option_l)
     {
         int listener; // Listening socket descriptor
@@ -90,23 +96,23 @@ int main(int argc, char **argv)
             exit(1);
         }
         r = validateInputs(cmdOps,&listener); 
-        
+        int k = cmdOps.option_k; 
         // Add the listener to set
+  
         pfds[0].fd = listener;
         pfds[0].events = POLLIN; // Report ready to read on incoming connection
         pfds[1].fd = STDIN_FILENO;
         pfds[1].events = POLLIN;
         fd_count = 2; // For the listener
-        int t; 
-        if(cmdOps.timeout!=0){
-            t = cmdOps.timeout; 
-        }else{
-            t = -1; 
-        }
+        int startserver = 1; 
         // Main loop
-        for (;;)
+        while (startserver)
         {
             int poll_count = poll(pfds, fd_count, t);
+            if(poll_count==0){
+                fprintf(stdout, "timeout"); 
+                exit(0); 
+            }
 
             if (poll_count == -1)
             {
@@ -136,6 +142,10 @@ int main(int argc, char **argv)
                         }
                         else
                         {
+                            if(fd_count==3 && k==0){
+                                close(newfd);
+                                continue; 
+                            }
                              //validateInputs(cmdOps,&newfd); 
                             add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
                         }
@@ -170,6 +180,9 @@ int main(int argc, char **argv)
                             {
                                 // Connection closed
                                 printf("pollserver: socket %d hung up\n", sender_fd);
+                                if(k==0){
+                                    startserver == 0; 
+                                }
                             }
                             else
                             {
